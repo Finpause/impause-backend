@@ -355,7 +355,20 @@ export class GeminiProcess extends OpenAPIRoute {
         },
     };
 
-    async handle(c) {
+    async handle(c: Context) {
+        const origin = c.req.header().Origin || '*';
+
+        if (c.req.method === "OPTIONS") {
+            return new Response(null, {
+                status: 204,
+                headers: {
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+                }
+            });
+        }
+
         const formData = await c.req.formData();
         const fileEntries = formData.getAll("files");
 
@@ -414,10 +427,18 @@ export class GeminiProcess extends OpenAPIRoute {
                 }
             }));
 
-            return {
+            return new Response(JSON.stringify({
                 success: true,
                 result: JSON.parse(result.response.text()),
-            };
+            }), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': origin,
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                }
+            });
         } catch (error) {
             return {
                 success: false,
