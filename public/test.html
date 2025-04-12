@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Statement Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<div class="container mx-auto px-4 py-8">
+    <header class="mb-8">
+        <h1 class="text-3xl font-bold text-blue-800">Bank Statement Analyzer</h1>
+        <p class="text-gray-600">Upload your bank statements (PDF) for AI-powered financial analysis</p>
+    </header>
+
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 class="text-xl font-semibold mb-4">Upload Statements</h2>
+
+        <form id="uploadForm" class="space-y-4">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center" id="dropzone">
+                <input type="file" id="fileInput" multiple accept="application/pdf" class="hidden" />
+                <label for="fileInput" class="cursor-pointer">
+                    <div class="space-y-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p class="text-gray-600">Drag and drop your PDF files here, or <span class="text-blue-600">browse</span></p>
+                        <p class="text-sm text-gray-500">Support for multiple bank statements</p>
+                    </div>
+                </label>
+            </div>
+
+            <div id="fileList" class="space-y-2 hidden">
+                <h3 class="font-medium">Selected Files:</h3>
+                <ul class="list-disc pl-5" id="selectedFiles"></ul>
+            </div>
+
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition">
+                Analyze Statements
+            </button>
+        </form>
+    </div>
+
+    <div id="loadingState" class="hidden bg-white rounded-lg shadow-md p-6 mb-8 text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p class="text-gray-600">Analyzing your statements...</p>
+        <p class="text-sm text-gray-500 mt-2">This might take a minute or two, especially for multiple statements.</p>
+    </div>
+
+    <div id="resultsSection" class="hidden bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-semibold mb-4">Analysis Results</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-blue-50 p-4 rounded-md">
+                <h3 class="font-medium text-blue-800 mb-2">Statement Period</h3>
+                <p id="period" class="text-lg"></p>
+            </div>
+
+            <div class="bg-green-50 p-4 rounded-md">
+                <h3 class="font-medium text-green-800 mb-2">Total Spending</h3>
+                <p id="totalSpend" class="text-2xl font-bold"></p>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <h3 class="font-medium mb-3">Spending by Category</h3>
+            <div id="categoryBreakdown" class="space-y-2"></div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="font-medium mb-3">Top Merchants</h3>
+                <div id="topMerchants" class="space-y-2"></div>
+            </div>
+
+            <div>
+                <h3 class="font-medium mb-3">Subscriptions</h3>
+                <div id="subscriptions">
+                    <p id="subscriptionSummary" class="mb-2"></p>
+                    <div id="subscriptionList" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6 p-4 bg-yellow-50 rounded-md">
+            <h3 class="font-medium text-yellow-800 mb-2">Financial Highlight</h3>
+            <p id="highlight" class="italic"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const selectedFiles = document.getElementById('selectedFiles');
+        const uploadForm = document.getElementById('uploadForm');
+        const loadingState = document.getElementById('loadingState');
+        const resultsSection = document.getElementById('resultsSection');
+
+        // Handle file selection
+        fileInput.addEventListener('change', updateFileList);
+
+        // Handle drag and drop
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('border-blue-400', 'bg-blue-50');
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('border-blue-400', 'bg-blue-50');
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('border-blue-400', 'bg-blue-50');
+
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                updateFileList();
+            }
+        });
+
+        // Handle form submission
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (fileInput.files.length === 0) {
+                alert('Please select at least one bank statement PDF file');
+                return;
+            }
+
+            const formData = new FormData();
+
+            // Append all files to the form data
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append('files', fileInput.files[i]);
+            }
+
+            // Show loading state
+            uploadForm.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/gemini', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Failed to analyze statements');
+                }
+
+                const data = await response.json();
+                displayResults(data.analysis);
+
+                // Show results section
+                loadingState.classList.add('hidden');
+                resultsSection.classList.remove('hidden');
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error: ${error.message}`);
+
+                // Return to the upload form
+                loadingState.classList.add('hidden');
+                uploadForm.classList.remove('hidden');
+            }
+        });
+
+        function updateFileList() {
+            if (fileInput.files.length > 0) {
+                selectedFiles.innerHTML = '';
+
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    const file = fileInput.files[i];
+                    const li = document.createElement('li');
+                    li.textContent = file.name;
+                    selectedFiles.appendChild(li);
+                }
+
+                fileList.classList.remove('hidden');
+            } else {
+                fileList.classList.add('hidden');
+            }
+        }
+
+        function displayResults(analysis) {
+            // Set basic information
+            document.getElementById('period').textContent = analysis.period;
+            document.getElementById('totalSpend').textContent = analysis.formattedTotal;
+
+            // Display categories
+            const categoryBreakdown = document.getElementById('categoryBreakdown');
+            categoryBreakdown.innerHTML = '';
+
+            analysis.categoryBreakdown.forEach(category => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between';
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'flex items-center';
+                nameDiv.innerHTML = `<span class="mr-2">${category.emoji}</span><span>${category.name}</span>`;
+
+                const valueDiv = document.createElement('div');
+                valueDiv.className = 'text-right';
+                valueDiv.innerHTML = `
+            <div>${analysis.currency}${category.amount.toFixed(2)}</div>
+            <div class="text-xs text-gray-500">${category.percentage.toFixed(1)}%</div>
+          `;
+
+                div.appendChild(nameDiv);
+                div.appendChild(valueDiv);
+                categoryBreakdown.appendChild(div);
+
+                // Add progress bar
+                const progressContainer = document.createElement('div');
+                progressContainer.className = 'w-full bg-gray-200 rounded-full h-2.5 mb-4';
+
+                const progressBar = document.createElement('div');
+                progressBar.className = `h-2.5 rounded-full ${category.color || 'bg-blue-600'}`;
+                progressBar.style.width = `${category.percentage}%`;
+
+                progressContainer.appendChild(progressBar);
+                categoryBreakdown.appendChild(progressContainer);
+            });
+
+            // Display top merchants if available
+            if (analysis.topMerchants && analysis.topMerchants.length > 0) {
+                const topMerchantsElem = document.getElementById('topMerchants');
+                topMerchantsElem.innerHTML = '';
+
+                analysis.topMerchants.forEach(merchant => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center justify-between';
+
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'flex items-center';
+                    nameDiv.innerHTML = `<span class="mr-2">${merchant.emoji}</span><span>${merchant.name}</span>`;
+
+                    const valueDiv = document.createElement('div');
+                    valueDiv.className = 'text-right';
+                    valueDiv.innerHTML = `
+              <div>${analysis.currency}${merchant.amount.toFixed(2)}</div>
+              <div class="text-xs text-gray-500">${merchant.visits} visits</div>
+            `;
+
+                    div.appendChild(nameDiv);
+                    div.appendChild(valueDiv);
+                    topMerchantsElem.appendChild(div);
+                });
+            }
+
+            // Display subscriptions
+            const subscriptionSummary = document.getElementById('subscriptionSummary');
+            subscriptionSummary.textContent = `${analysis.subscriptions.count} subscriptions totaling ${analysis.currency}${analysis.subscriptions.total.toFixed(2)}`;
+
+            const subscriptionList = document.getElementById('subscriptionList');
+            subscriptionList.innerHTML = '';
+
+            analysis.subscriptions.list.forEach(subscription => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between';
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'flex items-center';
+                nameDiv.innerHTML = `<span class="mr-2">${subscription.emoji}</span><span>${subscription.name}</span>`;
+
+                const valueDiv = document.createElement('div');
+                valueDiv.textContent = `${analysis.currency}${subscription.amount.toFixed(2)}`;
+
+                div.appendChild(nameDiv);
+                div.appendChild(valueDiv);
+                subscriptionList.appendChild(div);
+            });
+
+            // Display highlight if available
+            if (analysis.highlight) {
+                document.getElementById('highlight').textContent = analysis.highlight;
+            }
+        }
+    });
+</script>
+</body>
+</html>
