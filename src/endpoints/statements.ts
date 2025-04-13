@@ -1,12 +1,8 @@
-import { OpenAPIRoute } from "chanfana";
-import { z } from "zod";
-import { GenerationConfig, GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import {FileMetadataResponse, GoogleAIFileManager} from "@google/generative-ai/server"
-import {Context} from "hono";
-
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey);
-const fileManager = new GoogleAIFileManager(apiKey);
+import {OpenAPIRoute} from "chanfana";
+import {z} from "zod";
+import {GenerationConfig, SchemaType} from "@google/generative-ai";
+import {FileMetadataResponse} from "@google/generative-ai/server"
+import {fileManager, genAI} from "../utils/gemini";
 
 // System prompt for combined analysis approach
 const systemPrompt = `You are an expert financial analyst AI. You specialize in accurately extracting and summarizing data from unstructured text extracted from bank statements.
@@ -298,7 +294,7 @@ const calculateFinancialMetrics = (periodData) => {
     return result;
 };
 
-export class GeminiProcess extends OpenAPIRoute {
+export class GeminiStatementsProcess extends OpenAPIRoute {
     schema = {
         tags: ["Gemini"],
         summary: "Process financial statement files with Gemini API",
