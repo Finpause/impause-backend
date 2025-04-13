@@ -3,6 +3,7 @@ import {z} from "zod";
 import {GenerationConfig, SchemaType} from "@google/generative-ai";
 import {FileMetadataResponse} from "@google/generative-ai/server"
 import {fileManager, genAI} from "../utils/gemini";
+import {Context} from "hono";
 
 // System prompt for combined analysis approach
 const systemPrompt = `You are an expert financial analyst AI. You specialize in accurately extracting and summarizing data from unstructured text extracted from bank statements.
@@ -328,7 +329,7 @@ export class GeminiStatementsProcess extends OpenAPIRoute {
         },
     };
 
-    async handle(c) {
+    async handle(c: Context) {
         const origin = c.req.header("Origin") || '*';
 
         // Handle CORS preflight requests
@@ -336,9 +337,11 @@ export class GeminiStatementsProcess extends OpenAPIRoute {
             return new Response(null, {
                 status: 204,
                 headers: {
-                    "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Methods": "POST, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+                    'Access-Control-Allow-Origin': origin,
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Max-Age': '86400'
                 }
             });
         }
@@ -426,10 +429,11 @@ export class GeminiStatementsProcess extends OpenAPIRoute {
             }), {
                 status: 200,
                 headers: {
-                    'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': origin,
-                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Max-Age': '86400'
                 }
             });
         } catch (error) {
@@ -442,10 +446,11 @@ export class GeminiStatementsProcess extends OpenAPIRoute {
             }), {
                 status: 500,
                 headers: {
-                    'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': origin,
-                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Max-Age': '86400'
                 }
             });
         }

@@ -143,7 +143,7 @@
             loadingState.classList.remove('hidden');
 
             try {
-                const response = await fetch('/api/gemini', {
+                const response = await fetch('/api/statements', {
                     method: 'POST',
                     body: formData
                 });

@@ -55,9 +55,11 @@ export class GeminiReflectionsProcess extends OpenAPIRoute {
             return new Response(null, {
                 status: 204,
                 headers: {
-                    "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Methods": "POST, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+                    'Access-Control-Allow-Origin': origin,
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Max-Age': '86400'
                 }
             });
         }
@@ -117,10 +119,11 @@ Ensure the output is *strictly* a JSON array conforming to the schema and nothin
             }), {
                 status: 200,
                 headers: {
-                    'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': origin,
-                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Max-Age': '86400'
                 }
             });
         } catch (error) {
@@ -133,10 +136,11 @@ Ensure the output is *strictly* a JSON array conforming to the schema and nothin
             }), {
                 status: 500,
                 headers: {
-                    'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': origin,
-                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Max-Age': '86400'
                 }
             });
         }

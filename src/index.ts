@@ -13,7 +13,9 @@ const openapi = fromHono(app, {
 
 // Register OpenAPI endpoints
 openapi.post("/api/statements", GeminiStatementsProcess)
+openapi.on("options", "/api/statements", GeminiStatementsProcess)
 openapi.post("/api/reflections", GeminiReflectionsProcess)
+openapi.on("options", "/api/reflections", GeminiReflectionsProcess)
 
 // Export the Hono app
 export default app;
