@@ -2,6 +2,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import { GenerationConfig, GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { GoogleAIFileManager } from "@google/generative-ai/server"
+import {Context} from "hono";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
@@ -387,6 +388,8 @@ export class GeminiProcess extends OpenAPIRoute {
             const model = genAI.getGenerativeModel({
                 model: "gemini-2.0-flash",
                 systemInstruction: systemPrompt,
+            }, {
+                baseUrl: "https://gateway.ai.cloudflare.com/v1/df245a7d10b16486b18246e9eadcdd93/impause/google-ai-studio"
             });
 
             // Make a single API call to Gemini
