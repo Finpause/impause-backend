@@ -17,16 +17,19 @@ Your task is to analyze these statements and produce THREE separate analysis rep
 2. MONTHLY analysis: Using only transactions from the last 30 days (from the most recent transaction date)
 3. YEARLY analysis: Using ALL transactions from the entire period covered by the statements
 
+IMPORTANT: You MUST complete your JSON response in full. Do not stop early even if the response is large. Every open bracket or brace must have a corresponding closing bracket or brace. The response must be valid, complete JSON that can be parsed without errors.
+
 For each time period, you'll need to:
 1. **Process multiple statements as one dataset**: Identify the correct time range and avoid double-counting overlapping transactions.
 2. **Statement analysis**: Extract all transactions with accurate dates, descriptions, and amounts.
 3. **Transaction classification**: Categorize transactions into appropriate categories with fitting emojis.
 4. **Subscription detection**: Identify recurring payments based on description patterns and frequencies.
+5. **Internal transfers**: Exclude transfers between the user's own accounts (look for phrases like "Transfer to Checking", "Transfer from Savings", "Internal Transfer", "Credit Card Payment")
 
 Focus primarily on accurate extraction of transaction data. Don't worry about calculating totals or percentages - those will be calculated later.`;
 
 // Combined schema for the single API call
-const combinedConfig = {
+const combinedConfig: GenerationConfig = {
     temperature: 0.1,
     topP: 0.95,
     topK: 40,
@@ -247,14 +250,14 @@ const calculateFinancialMetrics = (periodData) => {
 
     // Create deep copy to avoid mutating original data
     const result = JSON.parse(JSON.stringify(periodData));
-    
+
     // Calculate total spend (sum of absolute values of negative transactions)
     const spendTransactions = result.transactions.filter(t => t.amount < 0);
     result.totalSpend = spendTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    
+
     // Format the total with currency
     result.formattedTotal = `${result.currency}${result.totalSpend.toFixed(2)}`;
-    
+
     // Calculate category breakdown
     const categories = {};
     spendTransactions.forEach(transaction => {
@@ -268,30 +271,30 @@ const calculateFinancialMetrics = (periodData) => {
         }
         categories[category].amount += Math.abs(transaction.amount);
     });
-    
+
     // Convert to array and calculate percentages
     result.categoryBreakdown = Object.values(categories);
     result.categoryBreakdown.forEach(category => {
         category.amount = parseFloat(category.amount.toFixed(2)); // Round to 2 decimal places
         category.percentage = parseFloat(((category.amount / result.totalSpend) * 100).toFixed(2));
     });
-    
+
     // Sort categories by amount (descending)
     result.categoryBreakdown.sort((a, b) => b.amount - a.amount);
-    
+
     // Process subscriptions
     const subscriptions = result.possibleSubscriptions || [];
     const subscriptionTotal = subscriptions.reduce((sum, sub) => sum + Math.abs(sub.amount), 0);
-    
+
     result.subscriptions = {
         count: subscriptions.length,
         total: parseFloat(subscriptionTotal.toFixed(2)),
         list: subscriptions
     };
-    
+
     // Clean up intermediate data
     delete result.possibleSubscriptions;
-    
+
     return result;
 };
 
@@ -394,14 +397,14 @@ export class GeminiProcess extends OpenAPIRoute {
 
             // Make a single API call to Gemini
             const result = await model.generateContent({
-                contents: [{ 
-                    role: "user", 
+                contents: [{
+                    role: "user",
                     parts: [
-                        { 
-                            text: "Analyze these bank statements and provide three separate analyses: weekly (last 7 days), monthly (last 30 days), and yearly (all transactions). Focus on accurate transaction extraction and categorization." 
-                        }, 
+                        {
+                            text: "Analyze these bank statements and provide three separate analyses: weekly (last 7 days), monthly (last 30 days), and yearly (all transactions). Focus on accurate transaction extraction and categorization."
+                        },
                         ...fileContents
-                    ] 
+                    ]
                 }],
                 generationConfig: combinedConfig,
             });
@@ -430,7 +433,7 @@ export class GeminiProcess extends OpenAPIRoute {
             });
         } catch (error) {
             console.error("Error in GeminiProcess:", error);
-            
+
             return new Response(JSON.stringify({
                 success: false,
                 error: error.message,
