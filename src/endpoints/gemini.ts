@@ -1,7 +1,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import { GenerationConfig, GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import { GoogleAIFileManager } from "@google/generative-ai/server"
+import {FileMetadataResponse, GoogleAIFileManager} from "@google/generative-ai/server"
 import {Context} from "hono";
 
 const apiKey = process.env.GEMINI_API_KEY;
@@ -365,7 +365,7 @@ export class GeminiProcess extends OpenAPIRoute {
             }
 
             // Upload files to Gemini
-            const uploadedFiles = [];
+            const uploadedFiles: FileMetadataResponse[] = [];
             for (const fileEntry of fileEntries) {
                 if (fileEntry instanceof File) {
                     const buffer = await fileEntry.arrayBuffer();
@@ -408,6 +408,11 @@ export class GeminiProcess extends OpenAPIRoute {
                 }],
                 generationConfig: combinedConfig,
             });
+
+            // Delete the uploaded files from the file manager
+            for (const file of uploadedFiles) {
+                await fileManager.deleteFile(file.name)
+            }
 
             // Parse the combined result
             const rawAnalysisData = JSON.parse(result.response.text());
