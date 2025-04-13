@@ -1,51 +1,150 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
-import {GenerationConfig, GoogleGenerativeAI, SchemaType} from "@google/generative-ai";
+import { GenerationConfig, GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { GoogleAIFileManager } from "@google/generative-ai/server"
 
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
 const fileManager = new GoogleAIFileManager(apiKey);
 
+// System prompt for combined analysis approach
 const systemPrompt = `You are an expert financial analyst AI. You specialize in accurately extracting and summarizing data from unstructured text extracted from bank statements.
 You will be given the text content of one or more bank statements from a user. These may be from different banks and/or cover consecutive or overlapping time periods.
-Your task is to:
-1. **Process multiple statements as one dataset**: If multiple statements are provided, treat them as a single comprehensive financial dataset. Identify the broadest time range that covers all statements and avoid double-counting overlapping transactions.
-2. **Statement analysis**: Carefully analyze the entire text to identify:
-   - The combined statement period (earliest date to latest date across all statements)
-   - Currency used (if multiple currencies appear, note each one)
-   - All individual transactions (date, description, amount)
-3. **Transaction classification**: For each transaction:
-   - Determine if it's a debit (spending/withdrawal) or credit (income/deposit)
-   - Assign a relevant category (e.g., 'Shopping', 'Food & Dining', 'Transport', 'Utilities', 'Salary', 'Transfer', 'Entertainment', 'Subscriptions', 'Other')
-   - Generate an appropriate emoji for the category (e.g., 🛒 for Shopping, 🍔 for Food & Dining)
-   - Detect duplicate transactions that might appear across multiple statements and count them only once
-4. **Spending calculations**:
-   - Calculate \`totalSpend\` by summing the absolute values of all identified debit transactions
-   - Create \`formattedTotal\` with proper currency symbol and formatting
-   - Calculate spending breakdown by category (\`categoryBreakdown\`) with appropriate emojis and visualization colors
-5. **Merchant analysis**:
-   - Identify the top 3-5 merchants (\`topMerchants\`) based on total spending
-   - Include visit frequency and representative emojis for each merchant
-   - Identify a \`favoriteStore\` based on visit frequency
-6. **Subscription detection**:
-   - Identify potential recurring subscriptions across all statements
-   - Calculate total subscription spending and its percentage of total spending
-   - Identify the top subscription services by amount
-   - Assign appropriate emojis to each subscription service
-7. **Financial insights**:
-   - Identify impulse purchases and calculate potential savings
-   - Determine spending trends and patterns
-   - Assign a money personality/mood based on spending habits
-   - Calculate progress toward savings goals if detectable
-   - Identify improved habits by comparing statement periods if applicable
-8. **Generate highlights**:
-   - Create a compelling \`highlight\` insight from the analysis
-   - Identify the \`topPurchase\` with merchant and emoji
-   - Determine the \`topCategory\` with amount and emoji
-9. **Structure the output**: Format all data according to the provided schema, ensuring all required fields are populated and data types match exactly.`;
 
-const generationConfig: GenerationConfig = {
+Your task is to analyze these statements and produce THREE separate analysis reports in a single response:
+1. WEEKLY analysis: Using only transactions from the last 7 days (from the most recent transaction date)
+2. MONTHLY analysis: Using only transactions from the last 30 days (from the most recent transaction date)
+3. YEARLY analysis: Using ALL transactions from the entire period covered by the statements
+
+For each time period, you'll need to:
+1. **Process multiple statements as one dataset**: Identify the correct time range and avoid double-counting overlapping transactions.
+2. **Statement analysis**: Analyze the text to identify transactions, dates, and currency.
+3. **Transaction classification**: Categorize transactions with appropriate emojis.
+4. **Spending calculations**: Calculate totalSpend and category breakdowns.
+5. **Merchant analysis**: Identify top merchants and favorite stores.
+6. **Subscription detection**: Identify recurring payments.
+7. **Financial insights**: Generate useful financial insights.
+8. **Structure the output**: Format all data according to the provided schema.`;
+
+// Response schema for a single time period analysis
+const periodAnalysisSchema = {
+    type: SchemaType.OBJECT,
+    properties: {
+        period: {
+            type: SchemaType.STRING,
+            description: "The date range covered by the analysis."
+        },
+        totalSpend: {
+            type: SchemaType.NUMBER,
+            description: "The total absolute amount spent (sum of all debits/withdrawals)."
+        },
+        formattedTotal: {
+            type: SchemaType.STRING,
+            description: "Formatted total spend with currency symbol."
+        },
+        currency: {
+            type: SchemaType.STRING,
+            description: "The currency symbol or code identified in the statement."
+        },
+        transactions: {
+            type: SchemaType.ARRAY,
+            description: "A list of individual transactions identified in the statement.",
+            items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    date: {
+                        type: SchemaType.STRING,
+                        description: "Date of the transaction (YYYY-MM-DD format)."
+                    },
+                    description: {
+                        type: SchemaType.STRING,
+                        description: "The description of the transaction from the statement."
+                    },
+                    amount: {
+                        type: SchemaType.NUMBER,
+                        description: "The amount of the transaction. Negative for debits, positive for credits."
+                    },
+                    category: {
+                        type: SchemaType.STRING,
+                        description: "Inferred spending category."
+                    },
+                    emoji: {
+                        type: SchemaType.STRING,
+                        description: "A representative emoji for this category."
+                    }
+                },
+                required: ["date", "description", "amount", "category", "emoji"]
+            }
+        },
+        categoryBreakdown: {
+            type: SchemaType.ARRAY,
+            description: "Spending broken down by categories.",
+            items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    name: {
+                        type: SchemaType.STRING,
+                        description: "Name of the spending category."
+                    },
+                    amount: {
+                        type: SchemaType.NUMBER,
+                        description: "Total amount spent in this category."
+                    },
+                    percentage: {
+                        type: SchemaType.NUMBER,
+                        description: "Percentage of total spending for this category."
+                    },
+                    emoji: {
+                        type: SchemaType.STRING,
+                        description: "A representative emoji for this category."
+                    }
+                },
+                required: ["name", "amount", "percentage", "emoji"]
+            }
+        },
+        subscriptions: {
+            type: SchemaType.OBJECT,
+            description: "Summary of potential recurring subscription payments.",
+            properties: {
+                count: {
+                    type: SchemaType.INTEGER,
+                    description: "Total number of distinct subscription services."
+                },
+                total: {
+                    type: SchemaType.NUMBER,
+                    description: "Total amount spent on subscriptions."
+                },
+                list: {
+                    type: SchemaType.ARRAY,
+                    description: "List of identified subscription payments.",
+                    items: {
+                        type: SchemaType.OBJECT,
+                        properties: {
+                            name: {
+                                type: SchemaType.STRING,
+                                description: "Name of the subscription service."
+                            },
+                            amount: {
+                                type: SchemaType.NUMBER,
+                                description: "Amount of the subscription payment."
+                            },
+                            emoji: {
+                                type: SchemaType.STRING,
+                                description: "A representative emoji for this subscription."
+                            }
+                        },
+                        required: ["name", "amount", "emoji"]
+                    }
+                }
+            },
+            required: ["count", "total", "list"]
+        }
+    },
+    required: ["period", "totalSpend", "currency", "transactions", "categoryBreakdown", "subscriptions"]
+};
+
+// Combined schema for the single API call
+const combinedConfig = {
     temperature: 0.1,
     topP: 0.95,
     topK: 40,
@@ -53,282 +152,29 @@ const generationConfig: GenerationConfig = {
     responseMimeType: "application/json",
     responseSchema: {
         type: SchemaType.OBJECT,
-        description: "Unified Finance Wrapped Data Extractor schema for structured data extracted and analyzed from bank statements, supporting weekly, monthly, or yearly summaries. Emojis are required.",
+        description: "Combined finance data analysis for weekly, monthly, and yearly periods",
         properties: {
-            period: {
-                type: SchemaType.STRING,
-                description: "The date range covered by the analysis (e.g., 'May 6 - May 12, 2025', 'May 2025', '2025'). Should match the input request's desired granularity."
+            weekly: {
+                ...periodAnalysisSchema,
+                description: "Finance data analysis for the most recent week only (last 7 days)"
             },
-            totalSpend: {
-                type: SchemaType.NUMBER,
-                description: "The total absolute amount spent (sum of all debits/withdrawals) during the period. Should be a positive number."
+            monthly: {
+                ...periodAnalysisSchema,
+                description: "Finance data analysis for the most recent month only (last 30 days)"
             },
-            formattedTotal: {
-                type: SchemaType.STRING,
-                description: "Formatted total spend with currency symbol (e.g., '$1,854.32'). Derived from totalSpend and currency."
-            },
-            currency: {
-                type: SchemaType.STRING,
-                description: "The currency symbol or code (e.g., $, €, GBP, USD) identified in the statement."
-            },
-            transactions: {
-                type: SchemaType.ARRAY,
-                description: "A list of individual transactions identified in the statement. This is the base data used for calculating summaries.",
-                items: {
-                    type: SchemaType.OBJECT,
-                    properties: {
-                        date: {
-                            type: SchemaType.STRING,
-                            description: "Date of the transaction (YYYY-MM-DD format)."
-                        },
-                        description: {
-                            type: SchemaType.STRING,
-                            description: "The description of the transaction from the statement."
-                        },
-                        amount: {
-                            type: SchemaType.NUMBER,
-                            description: "The amount of the transaction. Negative for debits/spending, positive for credits/deposits."
-                        },
-                        category: {
-                            type: SchemaType.STRING,
-                            description: "Inferred spending category (e.g., 'Food', 'Transport', 'Shopping', 'Entertainment', 'Housing', 'Other'). Use consistent categories."
-                        },
-                        emoji: {
-                            type: SchemaType.STRING,
-                            description: "A single representative emoji character for this transaction's category. Required."
-                        }
-                    },
-                    required: [
-                        "date",
-                        "description",
-                        "amount",
-                        "category",
-                        "emoji"
-                    ]
-                }
-            },
-            categoryBreakdown: {
-                type: SchemaType.ARRAY,
-                description: "Spending broken down by inferred categories. Only includes spending categories (debits). Sum of amounts should approximate totalSpend.",
-                items: {
-                    type: SchemaType.OBJECT,
-                    properties: {
-                        name: {
-                            type: SchemaType.STRING,
-                            description: "Name of the spending category (consistent with transaction categories)."
-                        },
-                        amount: {
-                            type: SchemaType.NUMBER,
-                            description: "Total absolute amount spent in this category (positive number)."
-                        },
-                        percentage: {
-                            type: SchemaType.NUMBER,
-                            description: "Percentage of total spending for this category (category amount / totalSpend * 100)."
-                        },
-                        color: {
-                            type: SchemaType.STRING,
-                            description: "Suggested visualization color hint (e.g., CSS class 'from-pink-500 to-orange-500' or hex code)."
-                        },
-                        emoji: {
-                            type: SchemaType.STRING,
-                            description: "A single representative emoji character for this category. Required."
-                        }
-                    },
-                    required: [
-                        "name",
-                        "amount",
-                        "percentage",
-                        "emoji"
-                    ]
-                }
-            },
-            topMerchants: {
-                type: SchemaType.ARRAY,
-                description: "Merchants with the highest total spending during the period (typically for monthly/yearly view). Derived from transactions.",
-                items: {
-                    type: SchemaType.OBJECT,
-                    properties: {
-                        name: {
-                            type: SchemaType.STRING,
-                            description: "Inferred name of the merchant."
-                        },
-                        amount: {
-                            type: SchemaType.NUMBER,
-                            description: "Total absolute amount spent at this merchant (positive number)."
-                        },
-                        category: {
-                            type: SchemaType.STRING,
-                            description: "The primary category associated with this merchant's spending."
-                        },
-                        visits: {
-                            type: SchemaType.INTEGER,
-                            description: "Number of transactions associated with this merchant (relevant for favoriteStore logic)."
-                        },
-                        emoji: {
-                            type: SchemaType.STRING,
-                            description: "A single representative emoji character for this merchant or its category. Required."
-                        }
-                    },
-                    required: [
-                        "name",
-                        "amount",
-                        "category",
-                        "visits",
-                        "emoji"
-                    ]
-                }
-            },
-            subscriptions: {
-                type: SchemaType.OBJECT,
-                description: "Summary of potential recurring subscription payments identified.",
-                properties: {
-                    count: {
-                        type: SchemaType.INTEGER,
-                        description: "Total number of distinct subscription services identified."
-                    },
-                    total: {
-                        type: SchemaType.NUMBER,
-                        description: "Total absolute amount spent on identified subscriptions during this period."
-                    },
-                    totalPercentage: {
-                        type: SchemaType.NUMBER,
-                        description: "Percentage of total spending attributed to subscriptions (subscriptions total / totalSpend * 100). More common in longer periods."
-                    },
-                    list: {
-                        type: SchemaType.ARRAY,
-                        description: "List of identified subscription payments in this period.",
-                        items: {
-                            type: SchemaType.OBJECT,
-                            properties: {
-                                name: {
-                                    type: SchemaType.STRING,
-                                    description: "Inferred name of the subscription service."
-                                },
-                                amount: {
-                                    type: SchemaType.NUMBER,
-                                    description: "Amount of the subscription payment (absolute value)."
-                                },
-                                emoji: {
-                                    type: SchemaType.STRING,
-                                    description: "A single representative emoji character for this subscription. Required."
-                                }
-                            },
-                            required: [
-                                "name",
-                                "amount",
-                                "emoji"
-                            ]
-                        }
-                    }
-                },
-                required: [
-                    "count",
-                    "total",
-                    "list"
-                ]
-            },
-            topPurchase: {
-                type: SchemaType.OBJECT,
-                description: "Details of the largest single debit transaction in the period (relevant for weekly/monthly).",
-                properties: {
-                    amount: {
-                        type: SchemaType.NUMBER,
-                        description: "Absolute amount of the largest single purchase."
-                    },
-                    merchant: {
-                        type: SchemaType.STRING,
-                        description: "Inferred merchant name for the largest purchase."
-                    },
-                    emoji: {
-                        type: SchemaType.STRING,
-                        description: "A single representative emoji character. Required."
-                    },
-                    description: {
-                        type: SchemaType.STRING,
-                        description: "Original transaction description for the largest purchase (for context)."
-                    },
-                    date: {
-                        type: SchemaType.STRING,
-                        description: "Date of the largest purchase (YYYY-MM-DD)."
-                    }
-                },
-                required: [
-                    "amount",
-                    "merchant",
-                    "date",
-                    "emoji"
-                ]
-            },
-            highlight: {
-                type: SchemaType.STRING,
-                description: "A concise, interesting observation or summary derived from the period's analysis (e.g., $0 spend day, significant purchase, spending trend). Requires interpretation."
-            },
-            savings: {
-                type: SchemaType.NUMBER,
-                description: "Estimated net savings during this period (e.g., total credits minus total debits, or specific savings transfers identified). Calculation method needs clarification/inference."
-            },
-            topCategory: {
-                type: SchemaType.OBJECT,
-                description: "Highest spending category information (Note: Can be derived from categoryBreakdown).",
-                properties: {
-                    name: {
-                        type: SchemaType.STRING,
-                        description: "Name of the top spending category."
-                    },
-                    amount: {
-                        type: SchemaType.NUMBER,
-                        description: "Total amount spent in this category."
-                    },
-                    emoji: {
-                        type: SchemaType.STRING,
-                        description: "Single emoji representing this category. Required."
-                    }
-                },
-                required: [
-                    "name",
-                    "amount",
-                    "emoji"
-                ]
-            },
-            favoriteStore: {
-                type: SchemaType.OBJECT,
-                description: "Most frequently visited merchant based on transaction count (Note: Can be derived from topMerchants or transactions).",
-                properties: {
-                    name: {
-                        type: SchemaType.STRING,
-                        description: "Name of the most frequented merchant."
-                    },
-                    visits: {
-                        type: SchemaType.INTEGER,
-                        description: "Number of visits/transactions."
-                    },
-                    emoji: {
-                        type: SchemaType.STRING,
-                        description: "Single emoji representing this merchant. Required."
-                    }
-                },
-                required: [
-                    "name",
-                    "visits",
-                    "emoji"
-                ]
+            yearly: {
+                ...periodAnalysisSchema,
+                description: "Finance data analysis for the entire period covered by the statements"
             }
         },
-        required: [
-            "period",
-            "totalSpend",
-            "currency",
-            "transactions",
-            "categoryBreakdown",
-            "subscriptions"
-        ]
-    },
+        required: ["weekly", "monthly", "yearly"]
+    }
 };
 
 export class GeminiProcess extends OpenAPIRoute {
     schema = {
         tags: ["Gemini"],
-        summary: "Process files with Gemini API",
+        summary: "Process financial statement files with Gemini API",
         request: {
             body: {
                 content: {
@@ -342,12 +188,16 @@ export class GeminiProcess extends OpenAPIRoute {
         },
         responses: {
             "200": {
-                description: "Gemini API response",
+                description: "Gemini API response with weekly, monthly, and yearly analysis",
                 content: {
                     "application/json": {
                         schema: z.object({
                             success: z.boolean(),
-                            result: z.any(), // Response from the Gemini model
+                            result: z.object({
+                                weekly: z.any(),
+                                monthly: z.any(),
+                                yearly: z.any()
+                            }),
                         }),
                     },
                 },
@@ -355,9 +205,10 @@ export class GeminiProcess extends OpenAPIRoute {
         },
     };
 
-    async handle(c: Context) {
-        const origin = c.req.header().Origin || '*';
+    async handle(c) {
+        const origin = c.req.header("Origin") || '*';
 
+        // Handle CORS preflight requests
         if (c.req.method === "OPTIONS") {
             return new Response(null, {
                 status: 204,
@@ -369,17 +220,23 @@ export class GeminiProcess extends OpenAPIRoute {
             });
         }
 
-        const formData = await c.req.formData();
-        const fileEntries = formData.getAll("files");
-
-        if (fileEntries.length === 0) {
-            return {
-                success: false,
-                error: "Missing files",
-            };
-        }
-
         try {
+            const formData = await c.req.formData();
+            const fileEntries = formData.getAll("files");
+
+            if (fileEntries.length === 0) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: "Missing files",
+                }), {
+                    status: 400,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': origin,
+                    }
+                });
+            }
+
             // Upload files to Gemini
             const uploadedFiles = [];
             for (const fileEntry of fileEntries) {
@@ -395,41 +252,44 @@ export class GeminiProcess extends OpenAPIRoute {
                 }
             }
 
-            // Wait for files to be processed
-            for (const file of uploadedFiles) {
-                let fileStatus = await fileManager.getFile(file.name);
-                while (fileStatus.state === "PROCESSING") {
-                    await new Promise((resolve) => setTimeout(resolve, 10000)); // Poll every 10 seconds
-                    fileStatus = await fileManager.getFile(file.name);
+            // Prepare file contents for Gemini model
+            const fileContents = uploadedFiles.map(file => ({
+                fileData: {
+                    mimeType: file.mimeType,
+                    fileUri: file.uri
                 }
-                if (fileStatus.state !== "ACTIVE") {
-                    throw new Error(`File ${file.name} failed to process`);
-                }
-            }
+            }));
 
-            // Interact with the Gemini model
+            // Create a single model instance with the combined system prompt
             const model = genAI.getGenerativeModel({
                 model: "gemini-2.0-flash",
                 systemInstruction: systemPrompt,
             });
 
-            const chatSession = model.startChat({
-                generationConfig: generationConfig,
-                history: []
+            // Make a single API call to Gemini
+            const result = await model.generateContent({
+                contents: [{ 
+                    role: "user", 
+                    parts: [
+                        { 
+                            text: "Analyze these bank statements and provide three separate analyses: weekly (last 7 days), monthly (last 30 days), and yearly (all transactions). Return your results in a structured JSON format with weekly, monthly, and yearly properties containing the analyses." 
+                        }, 
+                        ...fileContents
+                    ] 
+                }],
+                generationConfig: combinedConfig,
             });
 
-            const result = await chatSession.sendMessage(uploadedFiles.map(file => {
-                return {
-                    fileData: {
-                        mimeType: file.mimeType,
-                        fileUri: file.uri
-                    }
-                }
-            }));
+            // Parse the combined result
+            const analysisData = JSON.parse(result.response.text());
 
             return new Response(JSON.stringify({
                 success: true,
-                result: JSON.parse(result.response.text()),
+                result: {
+                    weekly: analysisData.weekly,
+                    monthly: analysisData.monthly,
+                    yearly: analysisData.yearly
+                }
             }), {
                 status: 200,
                 headers: {
@@ -440,10 +300,21 @@ export class GeminiProcess extends OpenAPIRoute {
                 }
             });
         } catch (error) {
-            return {
+            console.error("Error in GeminiProcess:", error);
+            
+            return new Response(JSON.stringify({
                 success: false,
                 error: error.message,
-            };
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            }), {
+                status: 500,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': origin,
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                }
+            });
         }
     }
 }
